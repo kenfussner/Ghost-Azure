@@ -5,6 +5,9 @@
     "siteName": {
       "type": "string"
     },
+    "storageAccountName": {
+      "type": "string"
+    },
     "hostingPlanName": {
       "type": "string"
     },
@@ -73,7 +76,7 @@
     }
   },
   "variables": {
-    "storageAccountName": "[concat('ghoststore', uniquestring(resourceGroup().id))]",
+    "storageAccountName": "[parameters('storageAccountName')]",
     "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
     "skuMapping": "[if(equals(parameters('sku'), 'Free'), 'F', if(equals(parameters('sku'), 'Shared'), 'D', if(equals(parameters('sku'), 'Basic'), 'B', if(equals(parameters('sku'), 'Standard'), 'S', if(equals(parameters('sku'), 'Premium'), 'P', 'F')))))]",
     "sku": "[concat(variables('skuMapping'), parameters('Worker Size'))]",
