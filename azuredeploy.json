@@ -55,6 +55,16 @@
       "type": "string",
       "defaultValue": ""
     },
+    "storageAccountType": {
+      "type": "string",
+      "defaultValue": "Standard_LRS",
+      "allowedValues": [
+        "Standard_LRS",
+        "Standard_GRS",
+        "Standard_ZRS",
+        "Premium_LRS"
+      ]
+    },
     "repoUrl": {
       "type": "string"
     },
@@ -63,11 +73,24 @@
     }
   },
   "variables": {
+    "storageAccountName": "[concat('ghoststore', uniquestring(resourceGroup().id))]",
+    "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
     "skuMapping": "[if(equals(parameters('sku'), 'Free'), 'F', if(equals(parameters('sku'), 'Shared'), 'D', if(equals(parameters('sku'), 'Basic'), 'B', if(equals(parameters('sku'), 'Standard'), 'S', if(equals(parameters('sku'), 'Premium'), 'P', 'F')))))]",
     "sku": "[concat(variables('skuMapping'), parameters('Worker Size'))]",
     "appInsightsName": "[concat(parameters('siteName'), '-insights')]"
   },
   "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2018-11-01",
+      "name": "[variables('storageAccountName')]",
+      "location": "[parameters('siteLocation')]",
+      "sku": {
+        "name": "[parameters('storageAccountType')]"
+      },
+      "kind": "StorageV2",
+      "properties": {}
+    },
     {
       "name": "[parameters('hostingPlanName')]",
       "type": "Microsoft.Web/serverfarms",
@@ -76,7 +99,9 @@
       "sku": {
         "name": "[variables('sku')]"
       },
-      "dependsOn": [],
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ],
       "properties": {
         "name": "[parameters('hostingPlanName')]",
         "numberOfWorkers": 1
@@ -107,9 +132,44 @@
             "[resourceId('Microsoft.Web/sites', parameters('siteName'))]"
           ],
           "properties": {
+            "netFrameworkVersion": "v4.7",  
             "use32BitWorkerProcess": false,
-            "httpsOnly": true,
-            "alwaysOn": true
+            "httpsonly": true,
+            "webSocketsEnabled": true, 
+            "alwaysOn": true,
+            "requestTracingEnabled": true,
+            "httpLoggingEnabled": true,
+            "logsDirectorySizeLimit": 40,
+            "detailedErrorLoggingEnabled": true, 
+            "remoteDebuggingEnabled": true
+          }
+        },
+        {
+          "apiVersion": "2018-11-01",
+          "name": "logs",
+          "type": "config",
+          "dependsOn": [
+            "[resourceId('Microsoft.Web/Sites', parameters('siteName'))]"
+          ],
+          "properties": {
+            "applicationLogs": {
+              "fileSystem": {
+                "level": "Warning"
+              }
+            },
+            "httpLogs": {
+              "fileSystem": {
+                "retentionInMb": 40,
+                "retentionInDays": 30,
+                "enabled": true
+              }
+            },
+            "failedRequestsTracing": {
+              "enabled": true
+            },
+            "detailedErrorMessages": {
+              "enabled": true
+            }
           }
         },
         {
@@ -118,7 +178,8 @@
           "apiVersion": "2018-11-01",
           "dependsOn": [
             "[resourceId('Microsoft.Web/sites', parameters('siteName'))]",
-            "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]"
+            "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]",
+            "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
           ],
           "properties": {
             "url": "[concat('https://', reference(resourceId('Microsoft.Web/sites', parameters('siteName'))).hostNames[0])]",
@@ -129,7 +190,8 @@
             "mail__from": "[parameters('Email From Address')]",
             "WEBSITE_NODE_DEFAULT_VERSION": "~10",
             "NODE_ENV": "production",
-            "APPINSIGHTS_INSTRUMENTATION_KEY": "[reference(concat('Microsoft.Insights/components/', variables('appInsightsName'))).InstrumentationKey]"
+            "APPINSIGHTS_INSTRUMENTATION_KEY": "[reference(concat('Microsoft.Insights/components/', variables('appInsightsName'))).InstrumentationKey]",
+            "AZURE_STORAGE_CONNECTION_STRING": "[concat('DefaultEndpointsProtocol=https;AccountName=',variables('storageAccountName'),';AccountKey=',concat(listKeys(variables('storageAccountId'), '2018-11-01').keys[0].value))]"
           }
         },
         {
